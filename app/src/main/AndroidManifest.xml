@@ -1,25 +1,25 @@
-<uses-permission android:name="android.permission.RECORD_AUDIO" />
-<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 <?xml version="1.0" encoding="utf-8"?>
-
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Bluetooth permissions -->
+    <!-- Bluetooth -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
 
     <!-- Android 12+ -->
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_SCAN"
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
-
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+
+    <!-- Voice Call -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
-    android:theme="@android:style/Theme.Material.Light.NoActionBar"
-    android:label="BT Chat"
-    android:allowBackup="true"
-    android:supportsRtl="true">
+        android:allowBackup="true"
+        android:label="BT Chat"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
