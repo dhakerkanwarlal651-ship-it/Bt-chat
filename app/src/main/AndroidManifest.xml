@@ -14,11 +14,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
-        android:theme="@style/Theme.BTChat"
-        android:label="BT Chat"
-        android:allowBackup="true"
-        android:supportsRtl="true">
-
+    android:theme="@android:style/Theme.Material.Light.NoActionBar"
+    android:label="BT Chat"
+    android:allowBackup="true"
+    android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
             android:exported="true">
