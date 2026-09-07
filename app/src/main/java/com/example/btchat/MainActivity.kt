@@ -2,18 +2,22 @@ package com.example.btchat
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.Typeface
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
+import android.view.View
 import android.widget.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -22,65 +26,198 @@ import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
 
-    private lateinit var bluetoothAdapter: BluetoothAdapter
-    private lateinit var statusText: TextView
-    private lateinit var chatText: TextView
-    private lateinit var deviceSpinner: Spinner
-    private lateinit var callButton: Button
-    private lateinit var answerButton: Button
-    private lateinit var rejectButton: Button
-    private lateinit var endCallButton: Button
+    private lateinit var adapter: BluetoothAdapter
 
     private var socket: BluetoothSocket? = null
-    private var outputStream: OutputStream? = null
-    private var inputStream: InputStream? = null
+    private var serverSocket: BluetoothServerSocket? = null
+    private var input: InputStream? = null
+    private var output: OutputStream? = null
 
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
 
+    private lateinit var statusText: TextView
+    private lateinit var deviceSpinner: Spinner
+    private lateinit var chatBox: TextView
+    private lateinit var messageInput: EditText
+
+    private lateinit var connectButton: Button
+    private lateinit var callButton: Button
+    private lateinit var waitButton: Button
+    private lateinit var acceptButton: Button
+    private lateinit var rejectButton: Button
+    private lateinit var endButton: Button
+    private lateinit var sendButton: Button
+
     @Volatile
     private var callActive = false
 
-    private val appUuid =
+    private val BT_UUID: UUID =
         UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-
-    companion object {
-        private const val REQUEST_PERMISSION = 100
-        private const val REQUEST_ENABLE_BT = 101
-        private const val SAMPLE_RATE = 16000
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+        adapter = BluetoothAdapter.getDefaultAdapter()
 
-        createUI()
-
-        if (bluetoothAdapter == null) {
-            statusText.text = "Bluetooth उपलब्ध नहीं है"
-            return
+        if (!hasBluetoothPermission()) {
+            requestPermissions(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.RECORD_AUDIO
+                ), 100
+            )
         }
 
-        requestPermissionsIfNeeded()
+        createModernUI()
+        loadPairedDevices()
+    }
 
-        findViewById<Button>(1001).setOnClickListener {
-            enableBluetooth()
+    private fun hasBluetoothPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun createModernUI() {
+
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setPadding(24, 20, 24, 24)
+        root.setBackgroundColor(Color.rgb(245, 247, 251))
+
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+
+        val header = TextView(this)
+        header.text = "🔵  BT Chat"
+        header.textSize = 28f
+        header.setTypeface(null, Typeface.BOLD)
+        header.setTextColor(Color.WHITE)
+        header.gravity = Gravity.CENTER_VERTICAL
+        header.setPadding(24, 10, 10, 10)
+        header.setBackgroundColor(Color.rgb(20, 80, 180))
+
+        content.addView(
+            header,
+            LinearLayout.LayoutParams(-1, 75)
+        )
+
+        statusText = TextView(this)
+        statusText.text = "●  Bluetooth Status: Ready"
+        statusText.textSize = 16f
+        statusText.setTypeface(null, Typeface.BOLD)
+        statusText.setTextColor(Color.rgb(20, 80, 180))
+        statusText.setPadding(18, 22, 18, 22)
+
+        content.addView(statusText)
+
+        val phoneTitle = TextView(this)
+        phoneTitle.text = "📱  SELECT PAIRED PHONE"
+        phoneTitle.textSize = 14f
+        phoneTitle.setTypeface(null, Typeface.BOLD)
+        phoneTitle.setTextColor(Color.DKGRAY)
+
+        content.addView(phoneTitle)
+
+        deviceSpinner = Spinner(this)
+        content.addView(
+            deviceSpinner,
+            LinearLayout.LayoutParams(-1, 55)
+        )
+
+        connectButton = makeButton("🔗  CONNECT PHONE")
+        content.addView(connectButton)
+
+        waitButton = makeButton("📡  WAIT FOR CONNECTION")
+        content.addView(waitButton)
+
+        val chatTitle = TextView(this)
+        chatTitle.text = "💬  CHAT"
+        chatTitle.textSize = 20f
+        chatTitle.setTypeface(null, Typeface.BOLD)
+        chatTitle.setTextColor(Color.rgb(20, 80, 180))
+        chatTitle.setPadding(0, 28, 0, 10)
+
+        content.addView(chatTitle)
+
+        chatBox = TextView(this)
+        chatBox.text = "No messages yet...\n"
+        chatBox.textSize = 16f
+        chatBox.setTextColor(Color.DKGRAY)
+        chatBox.setPadding(18, 18, 18, 18)
+        chatBox.setBackgroundColor(Color.WHITE)
+
+        val chatParams = LinearLayout.LayoutParams(-1, 230)
+        content.addView(chatBox, chatParams)
+
+        val chatRow = LinearLayout(this)
+        chatRow.orientation = LinearLayout.HORIZONTAL
+
+        messageInput = EditText(this)
+        messageInput.hint = "Type message..."
+        messageInput.textSize = 16f
+        messageInput.setSingleLine(true)
+
+        sendButton = makeButton("SEND")
+        sendButton.textSize = 13f
+
+        chatRow.addView(
+            messageInput,
+            LinearLayout.LayoutParams(0, 60, 1f)
+        )
+
+        chatRow.addView(
+            sendButton,
+            LinearLayout.LayoutParams(105, 60)
+        )
+
+        content.addView(chatRow)
+
+        val callTitle = TextView(this)
+        callTitle.text = "📞  VOICE CALL"
+        callTitle.textSize = 20f
+        callTitle.setTypeface(null, Typeface.BOLD)
+        callTitle.setTextColor(Color.rgb(20, 80, 180))
+        callTitle.setPadding(0, 28, 0, 10)
+
+        content.addView(callTitle)
+
+        callButton = makeButton("📞  CALL")
+        callButton.setTextColor(Color.rgb(0, 120, 50))
+        content.addView(callButton)
+
+        waitButton.setOnClickListener {
+            waitForConnection()
         }
 
-        findViewById<Button>(1002).setOnClickListener {
-            showPairedDevices()
+        acceptButton = makeButton("✅  ACCEPT CALL")
+        acceptButton.visibility = View.GONE
+        content.addView(acceptButton)
+
+        rejectButton = makeButton("❌  REJECT CALL")
+        rejectButton.visibility = View.GONE
+        content.addView(rejectButton)
+
+        endButton = makeButton("🔴  END CALL")
+        endButton.visibility = View.GONE
+        content.addView(endButton)
+
+        connectButton.setOnClickListener {
+            connectToSelectedDevice()
         }
 
-        findViewById<Button>(1003).setOnClickListener {
-            startWaitingForCall()
+        sendButton.setOnClickListener {
+            sendMessage()
         }
 
         callButton.setOnClickListener {
-            connectAndCall()
+            startVoiceCall()
         }
 
-        answerButton.setOnClickListener {
+        acceptButton.setOnClickListener {
             acceptCall()
         }
 
@@ -88,463 +225,257 @@ class MainActivity : Activity() {
             rejectCall()
         }
 
-        endCallButton.setOnClickListener {
+        endButton.setOnClickListener {
             endCall()
         }
+
+        scroll.addView(content)
+        root.addView(scroll)
+
+        setContentView(root)
     }
 
-    private fun createUI() {
-
-        val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.setPadding(25, 25, 25, 25)
-
-        statusText = TextView(this)
-        statusText.text = "BT Chat - Voice Call"
-        statusText.textSize = 20f
-
-        chatText = TextView(this)
-        chatText.text = "Status: तैयार"
-        chatText.textSize = 16f
-
-        val enableBtButton = Button(this)
-        enableBtButton.id = 1001
-        enableBtButton.text = "Bluetooth ON करें"
-
-        val refreshButton = Button(this)
-        refreshButton.id = 1002
-        refreshButton.text = "Paired Phone चुनें"
-
-        val waitButton = Button(this)
-        waitButton.id = 1003
-        waitButton.text = "Incoming Call का इंतजार"
-
-        callButton = Button(this)
-        callButton.text = "📞 CALL"
-
-        answerButton = Button(this)
-        answerButton.text = "✅ ACCEPT CALL"
-
-        rejectButton = Button(this)
-        rejectButton.text = "❌ REJECT CALL"
-
-        endCallButton = Button(this)
-        endCallButton.text = "🔴 END CALL"
-
-        deviceSpinner = Spinner(this)
-
-        layout.addView(statusText)
-        layout.addView(chatText)
-        layout.addView(enableBtButton)
-        layout.addView(refreshButton)
-        layout.addView(deviceSpinner)
-        layout.addView(callButton)
-        layout.addView(waitButton)
-        layout.addView(answerButton)
-        layout.addView(rejectButton)
-        layout.addView(endCallButton)
-
-        setContentView(layout)
+    private fun makeButton(text: String): Button {
+        val b = Button(this)
+        b.text = text
+        b.textSize = 15f
+        b.setTypeface(null, Typeface.BOLD)
+        b.setTextColor(Color.rgb(30, 30, 30))
+        return b
     }
 
-    private fun requestPermissionsIfNeeded() {
+    private fun loadPairedDevices() {
 
-        val permissions = mutableListOf<String>()
+        if (!hasBluetoothPermission()) return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-        }
+        val devices = adapter.bondedDevices.toList()
 
-        permissions.add(Manifest.permission.RECORD_AUDIO)
-
-        val needed = permissions.filter {
-            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (needed.isNotEmpty()) {
-            requestPermissions(
-                needed.toTypedArray(),
-                REQUEST_PERMISSION
-            )
-        }
-    }
-
-    private fun hasBluetoothPermission(): Boolean {
-
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            checkSelfPermission(
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED
+        val names = if (devices.isEmpty()) {
+            listOf("No paired phone")
         } else {
-            true
-        }
-    }
-
-    private fun hasAudioPermission(): Boolean {
-        return checkSelfPermission(
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun enableBluetooth() {
-
-        if (!hasBluetoothPermission()) {
-            requestPermissionsIfNeeded()
-            return
+            devices.map {
+                "${it.name ?: "Unknown"}\n${it.address}"
+            }
         }
 
-        if (!bluetoothAdapter.isEnabled) {
-            val intent =
-                android.content.Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            startActivityForResult(intent, REQUEST_ENABLE_BT)
-        } else {
-            statusText.text = "Bluetooth पहले से ON है"
-        }
-    }
-
-    private fun showPairedDevices() {
-
-        if (!hasBluetoothPermission()) {
-            requestPermissionsIfNeeded()
-            return
-        }
-
-        if (!bluetoothAdapter.isEnabled) {
-            Toast.makeText(
-                this,
-                "पहले Bluetooth ON करें",
-                Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-
-        val devices = bluetoothAdapter.bondedDevices.toList()
-
-        if (devices.isEmpty()) {
-            statusText.text = "कोई paired phone नहीं मिला"
-            return
-        }
-
-        val names = devices.map {
-            "${it.name ?: "Unknown"}\n${it.address}"
-        }
-
-        val adapter = ArrayAdapter(
+        val spinnerAdapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
             names
         )
 
-        deviceSpinner.adapter = adapter
-
-        deviceSpinner.tag = devices
-
-        statusText.text = "${devices.size} paired device मिले"
+        deviceSpinner.adapter = spinnerAdapter
     }
 
-    private fun getSelectedDevice(): BluetoothDevice? {
-
-        @Suppress("UNCHECKED_CAST")
-        val devices =
-            deviceSpinner.tag as? List<BluetoothDevice>
-                ?: return null
-
-        val position = deviceSpinner.selectedItemPosition
-
-        if (position < 0 || position >= devices.size) {
-            return null
-        }
-
-        return devices[position]
-    }
-
-    private fun connectAndCall() {
+    private fun connectToSelectedDevice() {
 
         if (!hasBluetoothPermission()) {
-            requestPermissionsIfNeeded()
+            statusText.text = "Bluetooth permission required"
             return
         }
 
-        if (!hasAudioPermission()) {
-            requestPermissionsIfNeeded()
+        val devices = adapter.bondedDevices.toList()
+
+        if (devices.isEmpty()) {
+            statusText.text = "पहले दोनों phones को Bluetooth से pair करें"
             return
         }
 
-        val device = getSelectedDevice()
+        val device = devices[deviceSpinner.selectedItemPosition]
 
-        if (device == null) {
+        statusText.text = "Connecting..."
+
+        thread {
+
+            try {
+                socket?.close()
+
+                socket = device.createRfcommSocketToServiceRecord(BT_UUID)
+                socket!!.connect()
+
+                input = socket!!.inputStream
+                output = socket!!.outputStream
+
+                runOnUiThread {
+                    statusText.text = "● Connected: ${device.name}"
+                }
+
+                listenForMessages()
+
+            } catch (e: Exception) {
+
+                runOnUiThread {
+                    statusText.text = "Connection failed"
+                    Toast.makeText(
+                        this,
+                        e.message ?: "Connection error",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun waitForConnection() {
+
+        if (!hasBluetoothPermission()) return
+
+        statusText.text = "Waiting for another phone..."
+
+        thread {
+
+            try {
+
+                serverSocket =
+                    adapter.listenUsingRfcommWithServiceRecord(
+                        "BT Chat",
+                        BT_UUID
+                    )
+
+                val connected = serverSocket!!.accept()
+
+                socket = connected
+                input = connected.inputStream
+                output = connected.outputStream
+
+                runOnUiThread {
+                    statusText.text = "● Phone Connected"
+                }
+
+                listenForMessages()
+
+            } catch (e: Exception) {
+
+                runOnUiThread {
+                    statusText.text = "Waiting stopped"
+                }
+            }
+        }
+    }
+
+    private fun listenForMessages() {
+
+        thread {
+
+            try {
+
+                val buffer = ByteArray(1024)
+
+                while (true) {
+
+                    val count = input?.read(buffer) ?: break
+
+                    if (count > 0) {
+
+                        val message =
+                            String(buffer, 0, count)
+
+                        runOnUiThread {
+
+                            if (message.trim() == "CALL_REQUEST") {
+
+                                statusText.text =
+                                    "📞 Incoming Voice Call"
+
+                                acceptButton.visibility = View.VISIBLE
+                                rejectButton.visibility = View.VISIBLE
+
+                            } else {
+
+                                chatBox.append(
+                                    "\n👤 Other: $message"
+                                )
+                            }
+                        }
+                    }
+                }
+
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun sendMessage() {
+
+        val text = messageInput.text.toString().trim()
+
+        if (text.isEmpty()) return
+
+        try {
+
+            output?.write(text.toByteArray())
+            output?.flush()
+
+            chatBox.append("\n🧑 You: $text")
+            messageInput.text.clear()
+
+        } catch (_: Exception) {
+
             Toast.makeText(
                 this,
-                "पहले Paired Phone चुनें",
+                "Phone connected नहीं है",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun startVoiceCall() {
+
+        if (socket == null) {
+            Toast.makeText(
+                this,
+                "पहले phone connect करें",
                 Toast.LENGTH_SHORT
             ).show()
             return
         }
 
-        statusText.text = "📞 Phone से connection हो रहा है..."
+        try {
 
-        thread {
+            output?.write("CALL_REQUEST".toByteArray())
+            output?.flush()
 
-            try {
+            statusText.text = "📞 Calling..."
 
-                bluetoothAdapter.cancelDiscovery()
+            callButton.visibility = View.GONE
+            endButton.visibility = View.VISIBLE
 
-                val newSocket =
-                    device.createRfcommSocketToServiceRecord(appUuid)
+            callActive = true
 
-                newSocket.connect()
+            startAudio()
 
-                socket = newSocket
-                inputStream = newSocket.inputStream
-                outputStream = newSocket.outputStream
-
-                runOnUiThread {
-                    statusText.text = "📞 CALL CONNECTED"
-                    chatText.text = "दूसरे फोन से आवाज़ जुड़ गई है"
-                }
-
-                outputStream?.write("CALL".toByteArray())
-
-                startVoiceCall()
-
-            } catch (e: Exception) {
-
-                runOnUiThread {
-                    statusText.text =
-                        "Connection failed: ${e.message}"
-                }
-
-                closeConnection()
-            }
+        } catch (_: Exception) {
+            statusText.text = "Call failed"
         }
-    }
-
-    private fun startWaitingForCall() {
-
-        if (!hasBluetoothPermission()) {
-            requestPermissionsIfNeeded()
-            return
-        }
-
-        statusText.text = "📲 Incoming Call का इंतजार..."
-
-        thread {
-
-            var serverSocket: BluetoothServerSocket? = null
-
-            try {
-
-                serverSocket =
-                    bluetoothAdapter.listenUsingRfcommWithServiceRecord(
-                        "BT Chat Voice",
-                        appUuid
-                    )
-
-                val newSocket = serverSocket.accept()
-
-                socket = newSocket
-                inputStream = newSocket.inputStream
-                outputStream = newSocket.outputStream
-
-                runOnUiThread {
-                    showIncomingCall()
-                }
-
-            } catch (e: Exception) {
-
-                runOnUiThread {
-                    statusText.text =
-                        "Waiting stopped: ${e.message}"
-                }
-
-            } finally {
-                try {
-                    serverSocket?.close()
-                } catch (_: Exception) {
-                }
-            }
-        }
-    }
-
-    private fun showIncomingCall() {
-
-        statusText.text = "📲 INCOMING CALL"
-
-        AlertDialog.Builder(this)
-            .setTitle("📞 Incoming Call")
-            .setMessage("दूसरे फोन से Voice Call आ रही है")
-            .setPositiveButton("ACCEPT") { _, _ ->
-                acceptCall()
-            }
-            .setNegativeButton("REJECT") { _, _ ->
-                rejectCall()
-            }
-            .setCancelable(false)
-            .show()
     }
 
     private fun acceptCall() {
 
-        if (!hasAudioPermission()) {
-            requestPermissionsIfNeeded()
-            return
-        }
+        acceptButton.visibility = View.GONE
+        rejectButton.visibility = View.GONE
 
-        try {
-            outputStream?.write("ACCEPT".toByteArray())
-        } catch (_: Exception) {
-        }
+        callButton.visibility = View.GONE
+        endButton.visibility = View.VISIBLE
 
-        statusText.text = "📞 CALL CONNECTED"
-        chatText.text = "Voice Call चालू है"
+        statusText.text = "📞 Voice Call Connected"
 
-        startVoiceCall()
+        callActive = true
+
+        startAudio()
     }
 
     private fun rejectCall() {
 
         try {
-            outputStream?.write("REJECT".toByteArray())
+            output?.write("CALL_REJECTED".toByteArray())
+            output?.flush()
         } catch (_: Exception) {
         }
 
+        acceptButton.visibility = View.GONE
+        rejectButton.visibility = View.GONE
+
         statusText.text = "Call rejected"
-        closeConnection()
-    }
-
-    private fun startVoiceCall() {
-
-        if (callActive) return
-
-        if (!hasAudioPermission()) {
-            requestPermissionsIfNeeded()
-            return
-        }
-
-        callActive = true
-
-        thread {
-            recordAndSendAudio()
-        }
-
-        thread {
-            receiveAndPlayAudio()
-        }
-    }
-
-    private fun recordAndSendAudio() {
-
-        val minBuffer = AudioRecord.getMinBufferSize(
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
-
-        val bufferSize = maxOf(minBuffer * 2, 4096)
-
-        try {
-
-            val recorder = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
-
-            audioRecord = recorder
-
-            recorder.startRecording()
-
-            val buffer = ByteArray(2048)
-
-            while (callActive) {
-
-                val read = recorder.read(
-                    buffer,
-                    0,
-                    buffer.size
-                )
-
-                if (read > 0) {
-
-                    try {
-                        outputStream?.write(
-                            buffer,
-                            0,
-                            read
-                        )
-                    } catch (_: Exception) {
-                        break
-                    }
-                }
-            }
-
-            recorder.stop()
-            recorder.release()
-
-        } catch (e: Exception) {
-
-            runOnUiThread {
-                statusText.text =
-                    "Microphone error: ${e.message}"
-            }
-        }
-    }
-
-    private fun receiveAndPlayAudio() {
-
-        val minBuffer = AudioTrack.getMinBufferSize(
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_OUT_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
-
-        val bufferSize = maxOf(minBuffer * 2, 4096)
-
-        try {
-
-            val track = AudioTrack(
-                android.media.AudioManager.STREAM_VOICE_CALL,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize,
-                AudioTrack.MODE_STREAM
-            )
-
-            audioTrack = track
-
-            track.play()
-
-            val buffer = ByteArray(2048)
-
-            while (callActive) {
-
-                val read =
-                    inputStream?.read(buffer)
-                        ?: break
-
-                if (read > 0) {
-                    track.write(
-                        buffer,
-                        0,
-                        read
-                    )
-                }
-            }
-
-            track.stop()
-            track.release()
-
-        } catch (e: Exception) {
-
-            runOnUiThread {
-                statusText.text =
-                    "Speaker error: ${e.message}"
-            }
-        }
     }
 
     private fun endCall() {
@@ -552,71 +483,98 @@ class MainActivity : Activity() {
         callActive = false
 
         try {
-            outputStream?.write("END".toByteArray())
+            audioRecord?.stop()
         } catch (_: Exception) {
         }
 
-        audioRecord?.let {
-            try {
-                it.stop()
-            } catch (_: Exception) {
-            }
-
-            try {
-                it.release()
-            } catch (_: Exception) {
-            }
+        try {
+            audioTrack?.stop()
+        } catch (_: Exception) {
         }
+
+        audioRecord?.release()
+        audioTrack?.release()
 
         audioRecord = null
-
-        audioTrack?.let {
-            try {
-                it.stop()
-            } catch (_: Exception) {
-            }
-
-            try {
-                it.release()
-            } catch (_: Exception) {
-            }
-        }
-
         audioTrack = null
 
-        statusText.text = "🔴 Call समाप्त"
-        chatText.text = "Call ended"
+        callButton.visibility = View.VISIBLE
+        endButton.visibility = View.GONE
 
-        closeConnection()
+        statusText.text = "● Connected"
     }
 
-    private fun closeConnection() {
+    private fun startAudio() {
 
-        callActive = false
-
-        try {
-            inputStream?.close()
-        } catch (_: Exception) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                200
+            )
+            return
         }
 
-        try {
-            outputStream?.close()
-        } catch (_: Exception) {
-        }
+        thread {
 
-        try {
-            socket?.close()
-        } catch (_: Exception) {
-        }
+            try {
 
-        inputStream = null
-        outputStream = null
-        socket = null
+                val sampleRate = 16000
+
+                val minBuffer =
+                    AudioRecord.getMinBufferSize(
+                        sampleRate,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT
+                    )
+
+                audioRecord = AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    minBuffer
+                )
+
+                audioRecord!!.startRecording()
+
+                val buffer = ByteArray(minBuffer)
+
+                while (callActive) {
+
+                    val read =
+                        audioRecord!!.read(
+                            buffer,
+                            0,
+                            buffer.size
+                        )
+
+                    if (read > 0) {
+                        output?.write(buffer, 0, read)
+                        output?.flush()
+                    }
+                }
+
+            } catch (_: Exception) {
+            }
+        }
     }
 
     override fun onDestroy() {
+
         callActive = false
-        closeConnection()
+
+        try {
+            audioRecord?.release()
+            audioTrack?.release()
+            input?.close()
+            output?.close()
+            socket?.close()
+            serverSocket?.close()
+        } catch (_: Exception) {
+        }
+
         super.onDestroy()
     }
 }
