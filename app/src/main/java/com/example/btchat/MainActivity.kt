@@ -746,4 +746,4 @@ class MainActivity : Activity() {
                     Context.INPUT_METHOD_SERVICE
                 ) as InputMethodManager
 
-            imm.hideSof
+            imm.hideSoftInputFromWindow(messageInput.windowToken, 0)
