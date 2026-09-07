@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
@@ -76,12 +77,11 @@ class MainActivity : Activity() {
 
     private fun hasBluetoothPermission(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                checkSelf Permission(Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED
     }
 
     private fun createModernUI() {
-
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
         root.setPadding(24, 20, 24, 24)
