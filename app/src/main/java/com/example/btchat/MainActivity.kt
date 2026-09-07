@@ -77,6 +77,19 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
+        root.setOnApplyWindowInsetsListener { view, insets ->
+    val top = insets.getInsets(android.view.WindowInsets.Type.statusBars()).top
+    val bottom = insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
+
+    view.setPadding(
+        view.paddingLeft,
+        top,
+        view.paddingRight,
+        bottom + 12
+    )
+
+    insets
+        }
         root.setBackgroundColor(Color.rgb(236, 229, 221))
 
         // ================= HEADER =================
