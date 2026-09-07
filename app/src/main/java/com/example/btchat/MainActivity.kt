@@ -3,6 +3,7 @@ package com.example.btchat
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.pm.PackageManager
@@ -13,8 +14,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.view.inputmethod.InputMethodManager
-import android.content.Context
 import android.widget.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -30,165 +29,184 @@ class MainActivity : Activity() {
     private var input: InputStream? = null
     private var output: OutputStream? = null
 
+    private lateinit var statusText: TextView
+    private lateinit var deviceSpinner: Spinner
     private lateinit var chatContainer: LinearLayout
     private lateinit var messageInput: EditText
-    private lateinit var statusText: TextView
-
-    private lateinit var deviceSpinner: Spinner
-    private lateinit var connectButton: Button
-    private lateinit var waitButton: Button
+    private lateinit var connectButton: TextView
+    private lateinit var waitButton: TextView
+    private lateinit var callButton: TextView
+    private lateinit var endCallButton: TextView
 
     private var callActive = false
 
-    private val BT_UUID: UUID =
-        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private val BT_UUID: UUID = UUID.fromString(
+        "00001101-0000-1000-8000-00805F9B34FB"
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         adapter = BluetoothAdapter.getDefaultAdapter()
 
-        if (!hasBluetoothPermission()) {
-            requestPermissions(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.BLUETOOTH_SCAN
-                ),
-                100
-            )
+        window.statusBarColor = Color.rgb(8, 84, 72)
+        window.navigationBarColor = Color.WHITE
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         }
 
-        createWhatsAppUI()
+        requestBluetoothPermission()
+
+        createUI()
         loadPairedDevices()
     }
 
-    private fun hasBluetoothPermission(): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                checkSelfPermission(
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) == PackageManager.PERMISSION_GRANTED
+    private fun requestBluetoothPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+
+            val permissions = arrayOf(
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.RECORD_AUDIO
+            )
+
+            val missing = permissions.filter {
+                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+            }
+
+            if (missing.isNotEmpty()) {
+                requestPermissions(missing.toTypedArray(), 100)
+            }
+        } else {
+            if (checkSelfPermission(
+                    Manifest.permission.RECORD_AUDIO
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(
+                    arrayOf(Manifest.permission.RECORD_AUDIO),
+                    101
+                )
+            }
+        }
     }
 
-    // ---------------------------------------------------------
-    // WHATSAPP STYLE UI
-    // ---------------------------------------------------------
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
 
-    private fun createWhatsAppUI() {
+    private fun rounded(
+        color: Int,
+        radius: Int
+    ): GradientDrawable {
+
+        return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+        }
+    }
+
+    private fun createUI() {
 
         val root = LinearLayout(this)
-root.orientation = LinearLayout.VERTICAL
-
-window.statusBarColor = Color.rgb(0, 105, 92)
-window.navigationBarColor = Color.WHITE
-
-window.decorView.systemUiVisibility =
-    android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-
-root.setOnApplyWindowInsetsListener { view, insets ->
-
-    val statusBar = insets.getInsets(
-        android.view.WindowInsets.Type.statusBars()
-    ).top
-
-    val navigationBar = insets.getInsets(
-        android.view.WindowInsets.Type.navigationBars()
-    ).bottom
-
-    view.setPadding(
-        view.paddingLeft,
-        statusBar +12,
-        view.paddingRight,
-        navigationBar + 46
-    )
-
-    insets
-}
-        root.setBackgroundColor(Color.rgb(236, 229, 221))
+        root.orientation = LinearLayout.VERTICAL
+        root.setBackgroundColor(Color.rgb(238, 241, 239))
 
         // ================= HEADER =================
 
         val header = LinearLayout(this)
         header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
-        header.setPadding(8, 0, 8, 0)
-        header.setBackgroundColor(Color.rgb(0, 128, 105))
-
-        val backButton = TextView(this)
-        backButton.text = "‹"
-        backButton.textSize = 42f
-        backButton.setTextColor(Color.WHITE)
-        backButton.gravity = Gravity.CENTER
-        backButton.setPadding(5, 0, 5, 0)
-
-        header.addView(
-            backButton,
-            LinearLayout.LayoutParams(48, 70)
+        header.setPadding(dp(10), dp(6), dp(10), dp(6))
+        header.background = GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            intArrayOf(
+                Color.rgb(7, 105, 91),
+                Color.rgb(0, 137, 123)
+            )
         )
 
-        val logo = TextView(this)
-        logo.text = "♢"
-        logo.textSize = 32f
-        logo.gravity = Gravity.CENTER
-        logo.setTextColor(Color.WHITE)
-
-        val logoBg = GradientDrawable()
-        logoBg.shape = GradientDrawable.OVAL
-        logoBg.setColor(Color.rgb(37, 150, 243))
-        logo.background = logoBg
-
-        header.addView(
-            logo,
-            LinearLayout.LayoutParams(55, 55)
+        val appIcon = TextView(this)
+        appIcon.text = "ᛒ"
+        appIcon.textSize = 30f
+        appIcon.gravity = Gravity.CENTER
+        appIcon.setTextColor(Color.WHITE)
+        appIcon.background = rounded(
+            Color.rgb(35, 135, 220),
+            50
         )
 
-        val titleLayout = LinearLayout(this)
-        titleLayout.orientation = LinearLayout.VERTICAL
-        titleLayout.setPadding(10, 0, 0, 0)
+        header.addView(
+            appIcon,
+            LinearLayout.LayoutParams(
+                dp(55),
+                dp(55)
+            )
+        )
+
+        val titleBox = LinearLayout(this)
+        titleBox.orientation = LinearLayout.VERTICAL
+        titleBox.setPadding(dp(14), 0, 0, 0)
 
         val title = TextView(this)
         title.text = "BT Chat"
-        title.textSize = 20f
+        title.textSize = 22f
         title.setTypeface(null, Typeface.BOLD)
         title.setTextColor(Color.WHITE)
 
         val subtitle = TextView(this)
-        subtitle.text = "Bluetooth Chat"
-        subtitle.textSize = 14f
-        subtitle.setTextColor(Color.rgb(220, 240, 235))
+        subtitle.text = "Bluetooth • Offline"
+        subtitle.textSize = 13f
+        subtitle.setTextColor(Color.rgb(210, 245, 238))
 
-        titleLayout.addView(title)
-        titleLayout.addView(subtitle)
+        titleBox.addView(title)
+        titleBox.addView(subtitle)
 
         header.addView(
-            titleLayout,
-            LinearLayout.LayoutParams(0, 70, 1f)
+            titleBox,
+            LinearLayout.LayoutParams(
+                0,
+                -2,
+                1f
+            )
         )
 
-        val callButton = TextView(this)
+        callButton = TextView(this)
         callButton.text = "☎"
-        callButton.textSize = 28f
+        callButton.textSize = 30f
         callButton.gravity = Gravity.CENTER
         callButton.setTextColor(Color.WHITE)
 
         header.addView(
             callButton,
-            LinearLayout.LayoutParams(55, 70)
+            LinearLayout.LayoutParams(
+                dp(58),
+                dp(58)
+            )
         )
 
-        val menuButton = TextView(this)
-        menuButton.text = "⋮"
-        menuButton.textSize = 30f
-        menuButton.gravity = Gravity.CENTER
-        menuButton.setTextColor(Color.WHITE)
+        val menu = TextView(this)
+        menu.text = "⋮"
+        menu.textSize = 30f
+        menu.gravity = Gravity.CENTER
+        menu.setTextColor(Color.WHITE)
 
         header.addView(
-            menuButton,
-            LinearLayout.LayoutParams(40, 70)
+            menu,
+            LinearLayout.LayoutParams(
+                dp(45),
+                dp(58)
+            )
         )
 
         root.addView(
             header,
-            LinearLayout.LayoutParams(-1, 70)
+            LinearLayout.LayoutParams(
+                -1,
+                dp(70)
+            )
         )
 
         // ================= CONNECTION BAR =================
@@ -196,105 +214,143 @@ root.setOnApplyWindowInsetsListener { view, insets ->
         val connectionBar = LinearLayout(this)
         connectionBar.orientation = LinearLayout.HORIZONTAL
         connectionBar.gravity = Gravity.CENTER_VERTICAL
-        connectionBar.setPadding(15, 0, 15, 0)
-        connectionBar.setBackgroundColor(Color.rgb(0, 105, 88))
+        connectionBar.setPadding(
+            dp(16),
+            0,
+            dp(14),
+            0
+        )
+        connectionBar.setBackgroundColor(
+            Color.rgb(0, 105, 92)
+        )
 
-        val greenDot = TextView(this)
-        greenDot.text = "●"
-        greenDot.textSize = 18f
-        greenDot.setTextColor(Color.GREEN)
+        val dot = TextView(this)
+        dot.text = "●"
+        dot.textSize = 22f
+        dot.setTextColor(Color.rgb(0, 255, 70))
 
         connectionBar.addView(
-            greenDot,
-            LinearLayout.LayoutParams(35, 45)
+            dot,
+            LinearLayout.LayoutParams(
+                dp(30),
+                -1
+            )
         )
 
         statusText = TextView(this)
-        statusText.text = "Connecting Bluetooth..."
-        statusText.textSize = 15f
+        statusText.text = "Bluetooth ready"
+        statusText.textSize = 16f
         statusText.setTypeface(null, Typeface.BOLD)
-        statusText.setTextColor(Color.CYAN)
+        statusText.setTextColor(Color.WHITE)
 
         connectionBar.addView(
             statusText,
-            LinearLayout.LayoutParams(0, 45, 1f)
+            LinearLayout.LayoutParams(
+                0,
+                -1,
+                1f
+            )
         )
 
-        val btIcon = TextView(this)
-        btIcon.text = "ᛒ"
-        btIcon.textSize = 28f
-        btIcon.setTextColor(Color.WHITE)
-        btIcon.gravity = Gravity.CENTER
+        val bt = TextView(this)
+        bt.text = "ᛒ"
+        bt.textSize = 28f
+        bt.setTextColor(Color.WHITE)
+        bt.gravity = Gravity.CENTER
 
         connectionBar.addView(
-            btIcon,
-            LinearLayout.LayoutParams(45, 45)
+            bt,
+            LinearLayout.LayoutParams(
+                dp(45),
+                -1
+            )
         )
 
         root.addView(
             connectionBar,
-            LinearLayout.LayoutParams(-1, 45)
+            LinearLayout.LayoutParams(
+                -1,
+                dp(52)
+            )
         )
 
-        // ================= DEVICE AREA =================
+        // ================= DEVICE SELECT =================
 
-        val deviceArea = LinearLayout(this)
-        deviceArea.orientation = LinearLayout.VERTICAL
-        deviceArea.setPadding(10, 5, 10, 5)
-        deviceArea.setBackgroundColor(Color.rgb(230, 224, 218))
+        val deviceRow = LinearLayout(this)
+        deviceRow.orientation = LinearLayout.HORIZONTAL
+        deviceRow.gravity = Gravity.CENTER_VERTICAL
+        deviceRow.setPadding(
+            dp(12),
+            dp(8),
+            dp(12),
+            dp(8)
+        )
+        deviceRow.setBackgroundColor(
+            Color.rgb(246, 247, 246)
+        )
 
         deviceSpinner = Spinner(this)
+        deviceSpinner.background = rounded(
+            Color.WHITE,
+            12
+        )
 
-        deviceArea.addView(
+        deviceRow.addView(
             deviceSpinner,
-            LinearLayout.LayoutParams(-1, 45)
+            LinearLayout.LayoutParams(
+                0,
+                dp(50),
+                1f
+            )
         )
 
-        val buttonRow = LinearLayout(this)
-        buttonRow.orientation = LinearLayout.HORIZONTAL
+        connectButton = actionButton(
+            "CONNECT"
+        )
 
-        connectButton = Button(this)
-        connectButton.text = "CONNECT"
-        connectButton.textSize = 12f
-
-        waitButton = Button(this)
-        waitButton.text = "WAIT"
-        waitButton.textSize = 12f
-
-        buttonRow.addView(
+        deviceRow.addView(
             connectButton,
-            LinearLayout.LayoutParams(0, 45, 1f)
+            LinearLayout.LayoutParams(
+                dp(105),
+                dp(50)
+            ).apply {
+                leftMargin = dp(8)
+            }
         )
-
-        buttonRow.addView(
-            waitButton,
-            LinearLayout.LayoutParams(0, 45, 1f)
-        )
-
-        deviceArea.addView(buttonRow)
 
         root.addView(
-            deviceArea,
-            LinearLayout.LayoutParams(-1, 95)
+            deviceRow,
+            LinearLayout.LayoutParams(
+                -1,
+                dp(66)
+            )
         )
 
         // ================= CHAT AREA =================
 
-        val scrollView = ScrollView(this)
-        scrollView.isFillViewport = true
+        val scroll = ScrollView(this)
+        scroll.isFillViewport = true
+        scroll.setBackgroundColor(
+            Color.rgb(238, 233, 226)
+        )
 
         chatContainer = LinearLayout(this)
         chatContainer.orientation = LinearLayout.VERTICAL
-        chatContainer.setPadding(12, 15, 12, 15)
+        chatContainer.setPadding(
+            dp(10),
+            dp(14),
+            dp(10),
+            dp(14)
+        )
 
-        val chatBackground = GradientDrawable()
-        chatBackground.setColor(Color.rgb(236, 229, 221))
-        chatContainer.background = chatBackground
+        addSystemMessage(
+            "Bluetooth chat ready"
+        )
 
-        scrollView.addView(chatContainer)
+        scroll.addView(chatContainer)
 
         root.addView(
-            scrollView,
+            scroll,
             LinearLayout.LayoutParams(
                 -1,
                 0,
@@ -302,246 +358,180 @@ root.setOnApplyWindowInsetsListener { view, insets ->
             )
         )
 
-        // ================= MESSAGE BAR =================
+        // ================= BOTTOM COMPOSER =================
 
         val bottom = LinearLayout(this)
         bottom.orientation = LinearLayout.HORIZONTAL
         bottom.gravity = Gravity.CENTER_VERTICAL
-        bottom.setPadding(7, 6, 7, 6)
-        bottom.setBackgroundColor(Color.rgb(236, 229, 221))
+        bottom.setPadding(
+            dp(8),
+            dp(7),
+            dp(8),
+            dp(7)
+        )
+        bottom.setBackgroundColor(
+            Color.rgb(246, 247, 246)
+        )
 
         val inputBox = LinearLayout(this)
         inputBox.orientation = LinearLayout.HORIZONTAL
         inputBox.gravity = Gravity.CENTER_VERTICAL
-        inputBox.setPadding(8, 0, 5, 0)
+        inputBox.background = rounded(
+            Color.WHITE,
+            30
+        )
 
-        val inputBg = GradientDrawable()
-        inputBg.shape = GradientDrawable.RECTANGLE
-        inputBg.cornerRadius = 45f
-        inputBg.setColor(Color.WHITE)
-        inputBox.background = inputBg
-
-        val emojiButton = TextView(this)
-        emojiButton.text = "☺"
-        emojiButton.textSize = 27f
-        emojiButton.setTextColor(Color.DKGRAY)
-        emojiButton.gravity = Gravity.CENTER
+        val emoji = TextView(this)
+        emoji.text = "☺"
+        emoji.textSize = 25f
+        emoji.gravity = Gravity.CENTER
+        emoji.setTextColor(Color.DKGRAY)
 
         inputBox.addView(
-            emojiButton,
-            LinearLayout.LayoutParams(45, 55)
+            emoji,
+            LinearLayout.LayoutParams(
+                dp(45),
+                dp(55)
+            )
         )
 
         messageInput = EditText(this)
         messageInput.hint = "Type a message..."
         messageInput.textSize = 16f
-        messageInput.setSingleLine(true)
+        messageInput.singleLine = true
+        messageInput.setTextColor(Color.BLACK)
+        messageInput.setHintTextColor(
+            Color.rgb(120, 120, 120)
+        )
         messageInput.setBackgroundColor(Color.TRANSPARENT)
-        messageInput.setPadding(5, 0, 5, 0)
+        messageInput.setPadding(
+            0,
+            0,
+            0,
+            0
+        )
 
         inputBox.addView(
             messageInput,
-            LinearLayout.LayoutParams(0, 55, 1f)
+            LinearLayout.LayoutParams(
+                0,
+                dp(55),
+                1f
+            )
         )
 
-        val attachButton = TextView(this)
-        attachButton.text = "📎"
-        attachButton.textSize = 24f
-        attachButton.gravity = Gravity.CENTER
+        val attach = TextView(this)
+        attach.text = "📎"
+        attach.textSize = 25f
+        attach.gravity = Gravity.CENTER
 
         inputBox.addView(
-            attachButton,
-            LinearLayout.LayoutParams(45, 55)
-        )
-
-        val cameraButton = TextView(this)
-        cameraButton.text = "▣"
-        cameraButton.textSize = 24f
-        cameraButton.gravity = Gravity.CENTER
-
-        inputBox.addView(
-            cameraButton,
-            LinearLayout.LayoutParams(45, 55)
+            attach,
+            LinearLayout.LayoutParams(
+                dp(45),
+                dp(55)
+            )
         )
 
         bottom.addView(
             inputBox,
-            LinearLayout.LayoutParams(0, 58, 1f)
+            LinearLayout.LayoutParams(
+                0,
+                dp(58),
+                1f
+            )
         )
 
-        val sendButton = TextView(this)
-        sendButton.text = "➤"
-        sendButton.textSize = 30f
-        sendButton.gravity = Gravity.CENTER
-        sendButton.setTextColor(Color.WHITE)
-
-        val sendBg = GradientDrawable()
-        sendBg.shape = GradientDrawable.OVAL
-        sendBg.setColor(Color.rgb(0, 168, 132))
-        sendButton.background = sendBg
-
-        val sendParams = LinearLayout.LayoutParams(58, 58)
-        sendParams.setMargins(6, 0, 0, 0)
+        val send = TextView(this)
+        send.text = "➤"
+        send.textSize = 29f
+        send.gravity = Gravity.CENTER
+        send.setTextColor(Color.WHITE)
+        send.background = rounded(
+            Color.rgb(0, 150, 136),
+            50
+        )
 
         bottom.addView(
-            sendButton,
-            sendParams
+            send,
+            LinearLayout.LayoutParams(
+                dp(58),
+                dp(58)
+            ).apply {
+                leftMargin = dp(7)
+            }
         )
 
-        val bottomParams = LinearLayout.LayoutParams(-1, 70)
-bottomParams.setMargins(0, 0, 0, 12)
+        root.addView(
+            bottom,
+            LinearLayout.LayoutParams(
+                -1,
+                dp(72)
+            )
+        )
 
-root.addView(
-    bottom,
-    bottomParams
-)
+        // ================= CALL PANEL =================
 
-        // ================= BUTTON ACTIONS =================
+        endCallButton = actionButton(
+            "END CALL"
+        )
+        endCallButton.visibility = View.GONE
+
+        root.addView(
+            endCallButton,
+            LinearLayout.LayoutParams(
+                -1,
+                dp(52)
+            )
+        )
+
+        // ================= ACTIONS =================
 
         connectButton.setOnClickListener {
             connectToSelectedDevice()
         }
 
-        waitButton.setOnClickListener {
-            waitForConnection()
-        }
-
-        sendButton.setOnClickListener {
+        send.setOnClickListener {
             sendMessage()
         }
 
         callButton.setOnClickListener {
-            Toast.makeText(
-                this,
-                "Voice call feature",
-                Toast.LENGTH_SHORT
-            ).show()
+            startCall()
         }
 
-        backButton.setOnClickListener {
-            finish()
+        endCallButton.setOnClickListener {
+            endCall()
         }
 
         setContentView(root)
-
-        addReceivedMessage(
-            "Bluetooth chat शुरू करें 👋",
-            "09:12"
-        )
     }
 
-    // ---------------------------------------------------------
-    // MESSAGE BUBBLE
-    // ---------------------------------------------------------
+    private fun actionButton(text: String): TextView {
 
-    private fun addSentMessage(message: String) {
+        val b = TextView(this)
 
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        row.gravity = Gravity.END
-
-        val bubble = TextView(this)
-
-        bubble.text = "$message    ${getTime()}  ✓✓"
-        bubble.textSize = 16f
-        bubble.setTextColor(Color.rgb(20, 20, 20))
-        bubble.setPadding(15, 10, 10, 8)
-
-        val bg = GradientDrawable()
-        bg.setColor(Color.rgb(220, 248, 198))
-        bg.cornerRadius = 18f
-
-        bubble.background = bg
-
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
+        b.text = text
+        b.textSize = 13f
+        b.setTypeface(null, Typeface.BOLD)
+        b.gravity = Gravity.CENTER
+        b.setTextColor(Color.WHITE)
+        b.background = rounded(
+            Color.rgb(0, 137, 123),
+            25
         )
 
-        params.setMargins(50, 4, 0, 4)
-
-        row.addView(bubble, params)
-
-        chatContainer.addView(row)
-
-        scrollToBottom()
+        return b
     }
 
-    private fun addReceivedMessage(message: String, time: String = getTime()) {
+    // ================= DEVICES =================
 
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        row.gravity = Gravity.START
+    private fun hasBluetoothPermission(): Boolean {
 
-        val bubble = TextView(this)
-
-        bubble.text = "$message    $time"
-        bubble.textSize = 16f
-        bubble.setTextColor(Color.rgb(20, 20, 20))
-        bubble.setPadding(15, 10, 10, 8)
-
-        val bg = GradientDrawable()
-        bg.setColor(Color.WHITE)
-        bg.cornerRadius = 18f
-
-        bubble.background = bg
-
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-
-        params.setMargins(0, 4, 50, 4)
-
-        row.addView(bubble, params)
-
-        chatContainer.addView(row)
-
-        scrollToBottom()
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                checkSelfPermission(
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
     }
-
-    private fun scrollToBottom() {
-        chatContainer.post {
-            val parent = chatContainer.parent
-            if (parent is ScrollView) {
-                parent.fullScroll(View.FOCUS_DOWN)
-            }
-        }
-    }
-
-    private fun getTime(): String {
-        val calendar = java.util.Calendar.getInstance()
-
-        val hour = calendar.get(
-            java.util.Calendar.HOUR
-        )
-
-        val minute = calendar.get(
-            java.util.Calendar.MINUTE
-        )
-
-        val amPm = if (
-            calendar.get(java.util.Calendar.AM_PM)
-            == java.util.Calendar.AM
-        ) {
-            "AM"
-        } else {
-            "PM"
-        }
-
-        val h = if (hour == 0) 12 else hour
-
-        return String.format(
-            "%02d:%02d %s",
-            h,
-            minute,
-            amPm
-        )
-    }
-
-    // ---------------------------------------------------------
-    // BLUETOOTH DEVICES
-    // ---------------------------------------------------------
 
     private fun loadPairedDevices() {
 
@@ -553,7 +543,7 @@ root.addView(
             listOf("No paired phone")
         } else {
             devices.map {
-                it.name ?: "Unknown device"
+                "${it.name ?: "Unknown device"}"
             }
         }
 
@@ -566,39 +556,32 @@ root.addView(
         deviceSpinner.adapter = spinnerAdapter
     }
 
-    // ---------------------------------------------------------
-    // CONNECT
-    // ---------------------------------------------------------
+    // ================= CONNECT =================
 
     private fun connectToSelectedDevice() {
 
         if (!hasBluetoothPermission()) {
-            Toast.makeText(
-                this,
-                "Bluetooth permission required",
-                Toast.LENGTH_SHORT
-            ).show()
+            requestBluetoothPermission()
             return
         }
 
         val devices = adapter.bondedDevices.toList()
 
         if (devices.isEmpty()) {
-            Toast.makeText(
-                this,
-                "Pehle dono phones ko Bluetooth se pair karein",
-                Toast.LENGTH_LONG
-            ).show()
+            statusText.text = "Pair both phones first"
             return
         }
 
         val position = deviceSpinner.selectedItemPosition
 
-        if (position < 0 || position >= devices.size) return
+        if (position < 0 || position >= devices.size) {
+            return
+        }
 
         val device = devices[position]
 
-        statusText.text = "Connecting..."
+        statusText.text =
+            "Connecting to ${device.name}..."
 
         thread {
 
@@ -607,7 +590,9 @@ root.addView(
                 socket?.close()
 
                 socket =
-                    device.createRfcommSocketToServiceRecord(BT_UUID)
+                    device.createRfcommSocketToServiceRecord(
+                        BT_UUID
+                    )
 
                 socket!!.connect()
 
@@ -619,11 +604,9 @@ root.addView(
                     statusText.text =
                         "Connected to: ${device.name}"
 
-                    Toast.makeText(
-                        this,
-                        "Bluetooth connected",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    addSystemMessage(
+                        "Connected securely"
+                    )
                 }
 
                 listenForMessages()
@@ -632,27 +615,30 @@ root.addView(
 
                 runOnUiThread {
 
-                    statusText.text = "Connection failed"
+                    statusText.text =
+                        "Connection failed"
 
                     Toast.makeText(
                         this,
-                        e.message ?: "Connection error",
-                        Toast.LENGTH_LONG
+                        "Bluetooth connection failed",
+                        Toast.LENGTH_SHORT
                     ).show()
                 }
             }
         }
     }
 
-    // ---------------------------------------------------------
-    // WAIT FOR CONNECTION
-    // ---------------------------------------------------------
+    // ================= WAIT =================
 
     private fun waitForConnection() {
 
-        if (!hasBluetoothPermission()) return
+        if (!hasBluetoothPermission()) {
+            requestBluetoothPermission()
+            return
+        }
 
-        statusText.text = "Waiting for connection..."
+        statusText.text =
+            "Waiting for Bluetooth connection..."
 
         thread {
 
@@ -668,25 +654,22 @@ root.addView(
                     serverSocket!!.accept()
 
                 socket = connected
-
                 input = connected.inputStream
                 output = connected.outputStream
 
                 runOnUiThread {
 
                     statusText.text =
-                        "Connected to Bluetooth phone"
+                        "Phone connected"
 
-                    Toast.makeText(
-                        this,
-                        "Phone connected",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    addSystemMessage(
+                        "Bluetooth connection established"
+                    )
                 }
 
                 listenForMessages()
 
-            } catch (e: Exception) {
+            } catch (_: Exception) {
 
                 runOnUiThread {
                     statusText.text =
@@ -696,9 +679,7 @@ root.addView(
         }
     }
 
-    // ---------------------------------------------------------
-    // RECEIVE MESSAGE
-    // ---------------------------------------------------------
+    // ================= RECEIVE =================
 
     private fun listenForMessages() {
 
@@ -713,28 +694,30 @@ root.addView(
                     val count =
                         input?.read(buffer) ?: break
 
-                    if (count > 0) {
+                    if (count <= 0) continue
 
-                        val message =
-                            String(
-                                buffer,
-                                0,
-                                count
-                            ).trim()
+                    val message =
+                        String(buffer, 0, count)
 
-                        if (message.isNotEmpty()) {
+                    runOnUiThread {
 
-                            runOnUiThread {
+                        when {
 
-                                if (
-                                    message != "CALL_REQUEST" &&
-                                    message != "CALL_REJECTED"
-                                ) {
+                            message == "CALL_REQUEST" -> {
+                                showIncomingCall()
+                            }
 
-                                    addReceivedMessage(
-                                        message
-                                    )
-                                }
+                            message == "CALL_END" -> {
+                                endCall()
+                            }
+
+                            message.startsWith("CALL_ACCEPTED") -> {
+                                statusText.text =
+                                    "Voice call connected"
+                            }
+
+                            else -> {
+                                addIncomingMessage(message)
                             }
                         }
                     }
@@ -745,16 +728,12 @@ root.addView(
         }
     }
 
-    // ---------------------------------------------------------
-    // SEND MESSAGE
-    // ---------------------------------------------------------
+    // ================= CHAT =================
 
     private fun sendMessage() {
 
         val text =
-            messageInput.text
-                .toString()
-                .trim()
+            messageInput.text.toString().trim()
 
         if (text.isEmpty()) return
 
@@ -766,22 +745,73 @@ root.addView(
 
             output?.flush()
 
-            addSentMessage(text)
+            addOutgoingMessage(text)
 
             messageInput.text.clear()
 
-            val imm =
-                getSystemService(
-                    Context.INPUT_METHOD_SERVICE
-                ) as InputMethodManager
-
-            imm.hideSoftInputFromWindow(messageInput.windowToken, 0)
         } catch (_: Exception) {
+
             Toast.makeText(
                 this,
-                "Phone connected नहीं है",
+                "Phone is not connected",
                 Toast.LENGTH_SHORT
             ).show()
         }
     }
-}
+
+    private fun addIncomingMessage(text: String) {
+
+        val row = LinearLayout(this)
+        row.gravity = Gravity.START
+
+        val bubble = TextView(this)
+        bubble.text = text
+        bubble.textSize = 17f
+        bubble.setTextColor(Color.rgb(25, 25, 25))
+        bubble.setPadding(
+            dp(16),
+            dp(11),
+            dp(16),
+            dp(11)
+        )
+        bubble.background = rounded(
+            Color.WHITE,
+            18
+        )
+
+        row.addView(
+            bubble,
+            LinearLayout.LayoutParams(
+                -2,
+                -2
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        )
+
+        chatContainer.addView(row)
+    }
+
+    private fun addOutgoingMessage(text: String) {
+
+        val row = LinearLayout(this)
+        row.gravity = Gravity.END
+
+        val bubble = TextView(this)
+        bubble.text = "$text  ✓✓"
+        bubble.textSize = 17f
+        bubble.setTextColor(Color.rgb(20, 70, 50))
+        bubble.setPadding(
+            dp(16),
+            dp(11),
+            dp(16),
+            dp(11)
+        )
+        bubble.background = rounded(
+            Color.rgb(207, 246, 196),
+            18
+        )
+
+        row.addView(
+            bubble,
+            LinearLayo
