@@ -96,7 +96,7 @@ root.setOnApplyWindowInsetsListener { view, insets ->
 
     view.setPadding(
         view.paddingLeft,
-        statusBar,
+        statusBar +12,
         view.paddingRight,
         navigationBar + 46
     )
