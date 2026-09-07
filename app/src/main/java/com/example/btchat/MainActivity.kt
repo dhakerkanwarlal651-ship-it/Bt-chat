@@ -728,6 +728,33 @@ class MainActivity : Activity() {
         }
     }
 
+   private fun endCall() {
+    callActive = false
+
+    try {
+        audioRecord?.stop()
+    } catch (_: Exception) {
+    }
+
+    try {
+        audioTrack?.stop()
+    } catch (_: Exception) {
+    }
+
+    audioRecord?.release()
+    audioTrack?.release()
+
+    audioRecord = null
+    audioTrack = null
+
+    runOnUiThread {
+        callButton.visibility = View.VISIBLE
+        endButton.visibility = View.GONE
+        acceptButton.visibility = View.GONE
+        rejectButton.visibility = View.GONE
+        statusText.text = "● Connected"
+    }
+   }
     // ================= CHAT =================
 
     private fun sendMessage() {
@@ -812,6 +839,15 @@ class MainActivity : Activity() {
             18
         )
 
-        row.addView(
+            row.addView(
             bubble,
-            LinearLayo
+            LinearLayout.LayoutParams(
+                -2,
+                -2
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        )
+
+        chatContainer.addView(row)
+    }
