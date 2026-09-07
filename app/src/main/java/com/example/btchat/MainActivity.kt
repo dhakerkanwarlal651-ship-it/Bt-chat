@@ -76,23 +76,28 @@ class MainActivity : Activity() {
     private fun createWhatsAppUI() {
 
         val root = LinearLayout(this)
-        window.statusBarColor = Color.rgb(0, 128, 105)
-window.navigationBarColor = Color.WHITE
-        root.orientation = LinearLayout.VERTICAL
-        root.setOnApplyWindowInsetsListener { view, insets ->
+root.orientation = LinearLayout.VERTICAL
+
+root.setPadding(0, 28, 0, 20)
+
+root.setOnApplyWindowInsetsListener { view, insets ->
+    val top = insets.getInsets(
+        android.view.WindowInsets.Type.statusBars()
+    ).top
+
     val bottom = insets.getInsets(
         android.view.WindowInsets.Type.navigationBars()
     ).bottom
 
     view.setPadding(
-        view.paddingLeft,
         0,
-        view.paddingRight,
+        top,
+        0,
         bottom + 12
     )
 
     insets
-        }
+}
         root.setBackgroundColor(Color.rgb(236, 229, 221))
 
         // ================= HEADER =================
