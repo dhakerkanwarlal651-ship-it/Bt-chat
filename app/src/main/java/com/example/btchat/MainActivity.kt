@@ -375,10 +375,13 @@ class MainActivity : Activity() {
             sendParams
         )
 
-        root.addView(
-            bottom,
-            LinearLayout.LayoutParams(-1, 70)
-        )
+        val bottomParams = LinearLayout.LayoutParams(-1, 70)
+bottomParams.setMargins(0, 0, 0, 12)
+
+root.addView(
+    bottom,
+    bottomParams
+)
 
         // ================= BUTTON ACTIONS =================
 
