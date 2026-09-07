@@ -98,7 +98,7 @@ root.setOnApplyWindowInsetsListener { view, insets ->
         view.paddingLeft,
         statusBar,
         view.paddingRight,
-        navigationBar + 8
+        navigationBar + 46
     )
 
     insets
