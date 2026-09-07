@@ -747,3 +747,12 @@ class MainActivity : Activity() {
                 ) as InputMethodManager
 
             imm.hideSoftInputFromWindow(messageInput.windowToken, 0)
+        } catch (_: Exception) {
+            Toast.makeText(
+                this,
+                "Phone connected नहीं है",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+}
