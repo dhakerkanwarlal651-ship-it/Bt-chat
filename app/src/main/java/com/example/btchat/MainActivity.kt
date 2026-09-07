@@ -77,7 +77,7 @@ class MainActivity : Activity() {
 
     private fun hasBluetoothPermission(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                checkSelf Permission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED
     }
 
