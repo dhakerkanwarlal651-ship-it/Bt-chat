@@ -3,22 +3,18 @@ package com.example.btchat
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.AudioTrack
-import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
 import android.widget.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -34,23 +30,14 @@ class MainActivity : Activity() {
     private var input: InputStream? = null
     private var output: OutputStream? = null
 
-    private var audioRecord: AudioRecord? = null
-    private var audioTrack: AudioTrack? = null
-
-    private lateinit var statusText: TextView
-    private lateinit var deviceSpinner: Spinner
-    private lateinit var chatBox: TextView
+    private lateinit var chatContainer: LinearLayout
     private lateinit var messageInput: EditText
+    private lateinit var statusText: TextView
 
+    private lateinit var deviceSpinner: Spinner
     private lateinit var connectButton: Button
-    private lateinit var callButton: Button
     private lateinit var waitButton: Button
-    private lateinit var acceptButton: Button
-    private lateinit var rejectButton: Button
-    private lateinit var endButton: Button
-    private lateinit var sendButton: Button
 
-    @Volatile
     private var callActive = false
 
     private val BT_UUID: UUID =
@@ -65,148 +52,329 @@ class MainActivity : Activity() {
             requestPermissions(
                 arrayOf(
                     Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.RECORD_AUDIO
-                ), 100
+                    Manifest.permission.BLUETOOTH_SCAN
+                ),
+                100
             )
         }
 
-        createModernUI()
+        createWhatsAppUI()
         loadPairedDevices()
     }
 
     private fun hasBluetoothPermission(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-                PackageManager.PERMISSION_GRANTED
+                checkSelfPermission(
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun createModernUI() {
+    // ---------------------------------------------------------
+    // WHATSAPP STYLE UI
+    // ---------------------------------------------------------
+
+    private fun createWhatsAppUI() {
+
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(24, 20, 24, 24)
-        root.setBackgroundColor(Color.rgb(245, 247, 251))
+        root.setBackgroundColor(Color.rgb(236, 229, 221))
 
-        val scroll = ScrollView(this)
-        val content = LinearLayout(this)
-        content.orientation = LinearLayout.VERTICAL
+        // ================= HEADER =================
 
-        val header = TextView(this)
-        header.text = "🔵  BT Chat"
-        header.textSize = 28f
-        header.setTypeface(null, Typeface.BOLD)
-        header.setTextColor(Color.WHITE)
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
-        header.setPadding(24, 10, 10, 10)
-        header.setBackgroundColor(Color.rgb(20, 80, 180))
+        header.setPadding(8, 0, 8, 0)
+        header.setBackgroundColor(Color.rgb(0, 128, 105))
 
-        content.addView(
+        val backButton = TextView(this)
+        backButton.text = "‹"
+        backButton.textSize = 42f
+        backButton.setTextColor(Color.WHITE)
+        backButton.gravity = Gravity.CENTER
+        backButton.setPadding(5, 0, 5, 0)
+
+        header.addView(
+            backButton,
+            LinearLayout.LayoutParams(48, 70)
+        )
+
+        val logo = TextView(this)
+        logo.text = "♢"
+        logo.textSize = 32f
+        logo.gravity = Gravity.CENTER
+        logo.setTextColor(Color.WHITE)
+
+        val logoBg = GradientDrawable()
+        logoBg.shape = GradientDrawable.OVAL
+        logoBg.setColor(Color.rgb(37, 150, 243))
+        logo.background = logoBg
+
+        header.addView(
+            logo,
+            LinearLayout.LayoutParams(55, 55)
+        )
+
+        val titleLayout = LinearLayout(this)
+        titleLayout.orientation = LinearLayout.VERTICAL
+        titleLayout.setPadding(10, 0, 0, 0)
+
+        val title = TextView(this)
+        title.text = "BT Chat"
+        title.textSize = 20f
+        title.setTypeface(null, Typeface.BOLD)
+        title.setTextColor(Color.WHITE)
+
+        val subtitle = TextView(this)
+        subtitle.text = "Bluetooth Chat"
+        subtitle.textSize = 14f
+        subtitle.setTextColor(Color.rgb(220, 240, 235))
+
+        titleLayout.addView(title)
+        titleLayout.addView(subtitle)
+
+        header.addView(
+            titleLayout,
+            LinearLayout.LayoutParams(0, 70, 1f)
+        )
+
+        val callButton = TextView(this)
+        callButton.text = "☎"
+        callButton.textSize = 28f
+        callButton.gravity = Gravity.CENTER
+        callButton.setTextColor(Color.WHITE)
+
+        header.addView(
+            callButton,
+            LinearLayout.LayoutParams(55, 70)
+        )
+
+        val menuButton = TextView(this)
+        menuButton.text = "⋮"
+        menuButton.textSize = 30f
+        menuButton.gravity = Gravity.CENTER
+        menuButton.setTextColor(Color.WHITE)
+
+        header.addView(
+            menuButton,
+            LinearLayout.LayoutParams(40, 70)
+        )
+
+        root.addView(
             header,
-            LinearLayout.LayoutParams(-1, 75)
+            LinearLayout.LayoutParams(-1, 70)
+        )
+
+        // ================= CONNECTION BAR =================
+
+        val connectionBar = LinearLayout(this)
+        connectionBar.orientation = LinearLayout.HORIZONTAL
+        connectionBar.gravity = Gravity.CENTER_VERTICAL
+        connectionBar.setPadding(15, 0, 15, 0)
+        connectionBar.setBackgroundColor(Color.rgb(0, 105, 88))
+
+        val greenDot = TextView(this)
+        greenDot.text = "●"
+        greenDot.textSize = 18f
+        greenDot.setTextColor(Color.GREEN)
+
+        connectionBar.addView(
+            greenDot,
+            LinearLayout.LayoutParams(35, 45)
         )
 
         statusText = TextView(this)
-        statusText.text = "●  Bluetooth Status: Ready"
-        statusText.textSize = 16f
+        statusText.text = "Connecting Bluetooth..."
+        statusText.textSize = 15f
         statusText.setTypeface(null, Typeface.BOLD)
-        statusText.setTextColor(Color.rgb(20, 80, 180))
-        statusText.setPadding(18, 22, 18, 22)
+        statusText.setTextColor(Color.CYAN)
 
-        content.addView(statusText)
+        connectionBar.addView(
+            statusText,
+            LinearLayout.LayoutParams(0, 45, 1f)
+        )
 
-        val phoneTitle = TextView(this)
-        phoneTitle.text = "📱  SELECT PAIRED PHONE"
-        phoneTitle.textSize = 14f
-        phoneTitle.setTypeface(null, Typeface.BOLD)
-        phoneTitle.setTextColor(Color.DKGRAY)
+        val btIcon = TextView(this)
+        btIcon.text = "ᛒ"
+        btIcon.textSize = 28f
+        btIcon.setTextColor(Color.WHITE)
+        btIcon.gravity = Gravity.CENTER
 
-        content.addView(phoneTitle)
+        connectionBar.addView(
+            btIcon,
+            LinearLayout.LayoutParams(45, 45)
+        )
+
+        root.addView(
+            connectionBar,
+            LinearLayout.LayoutParams(-1, 45)
+        )
+
+        // ================= DEVICE AREA =================
+
+        val deviceArea = LinearLayout(this)
+        deviceArea.orientation = LinearLayout.VERTICAL
+        deviceArea.setPadding(10, 5, 10, 5)
+        deviceArea.setBackgroundColor(Color.rgb(230, 224, 218))
 
         deviceSpinner = Spinner(this)
-        content.addView(
+
+        deviceArea.addView(
             deviceSpinner,
-            LinearLayout.LayoutParams(-1, 55)
+            LinearLayout.LayoutParams(-1, 45)
         )
 
-        connectButton = makeButton("🔗  CONNECT PHONE")
-        content.addView(connectButton)
+        val buttonRow = LinearLayout(this)
+        buttonRow.orientation = LinearLayout.HORIZONTAL
 
-        waitButton = makeButton("📡  WAIT FOR CONNECTION")
-        content.addView(waitButton)
+        connectButton = Button(this)
+        connectButton.text = "CONNECT"
+        connectButton.textSize = 12f
 
-        val chatTitle = TextView(this)
-        chatTitle.text = "💬  CHAT"
-        chatTitle.textSize = 20f
-        chatTitle.setTypeface(null, Typeface.BOLD)
-        chatTitle.setTextColor(Color.rgb(20, 80, 180))
-        chatTitle.setPadding(0, 28, 0, 10)
+        waitButton = Button(this)
+        waitButton.text = "WAIT"
+        waitButton.textSize = 12f
 
-        content.addView(chatTitle)
+        buttonRow.addView(
+            connectButton,
+            LinearLayout.LayoutParams(0, 45, 1f)
+        )
 
-        chatBox = TextView(this)
-        chatBox.text = "No messages yet...\n"
-        chatBox.textSize = 16f
-        chatBox.setTextColor(Color.DKGRAY)
-        chatBox.setPadding(18, 18, 18, 18)
-        chatBox.setBackgroundColor(Color.WHITE)
+        buttonRow.addView(
+            waitButton,
+            LinearLayout.LayoutParams(0, 45, 1f)
+        )
 
-        val chatParams = LinearLayout.LayoutParams(-1, 230)
-        content.addView(chatBox, chatParams)
+        deviceArea.addView(buttonRow)
 
-        val chatRow = LinearLayout(this)
-        chatRow.orientation = LinearLayout.HORIZONTAL
+        root.addView(
+            deviceArea,
+            LinearLayout.LayoutParams(-1, 95)
+        )
+
+        // ================= CHAT AREA =================
+
+        val scrollView = ScrollView(this)
+        scrollView.isFillViewport = true
+
+        chatContainer = LinearLayout(this)
+        chatContainer.orientation = LinearLayout.VERTICAL
+        chatContainer.setPadding(12, 15, 12, 15)
+
+        val chatBackground = GradientDrawable()
+        chatBackground.setColor(Color.rgb(236, 229, 221))
+        chatContainer.background = chatBackground
+
+        scrollView.addView(chatContainer)
+
+        root.addView(
+            scrollView,
+            LinearLayout.LayoutParams(
+                -1,
+                0,
+                1f
+            )
+        )
+
+        // ================= MESSAGE BAR =================
+
+        val bottom = LinearLayout(this)
+        bottom.orientation = LinearLayout.HORIZONTAL
+        bottom.gravity = Gravity.CENTER_VERTICAL
+        bottom.setPadding(7, 6, 7, 6)
+        bottom.setBackgroundColor(Color.rgb(236, 229, 221))
+
+        val inputBox = LinearLayout(this)
+        inputBox.orientation = LinearLayout.HORIZONTAL
+        inputBox.gravity = Gravity.CENTER_VERTICAL
+        inputBox.setPadding(8, 0, 5, 0)
+
+        val inputBg = GradientDrawable()
+        inputBg.shape = GradientDrawable.RECTANGLE
+        inputBg.cornerRadius = 45f
+        inputBg.setColor(Color.WHITE)
+        inputBox.background = inputBg
+
+        val emojiButton = TextView(this)
+        emojiButton.text = "☺"
+        emojiButton.textSize = 27f
+        emojiButton.setTextColor(Color.DKGRAY)
+        emojiButton.gravity = Gravity.CENTER
+
+        inputBox.addView(
+            emojiButton,
+            LinearLayout.LayoutParams(45, 55)
+        )
 
         messageInput = EditText(this)
-        messageInput.hint = "Type message..."
+        messageInput.hint = "Type a message..."
         messageInput.textSize = 16f
         messageInput.setSingleLine(true)
+        messageInput.setBackgroundColor(Color.TRANSPARENT)
+        messageInput.setPadding(5, 0, 5, 0)
 
-        sendButton = makeButton("SEND")
-        sendButton.textSize = 13f
-
-        chatRow.addView(
+        inputBox.addView(
             messageInput,
-            LinearLayout.LayoutParams(0, 60, 1f)
+            LinearLayout.LayoutParams(0, 55, 1f)
         )
 
-        chatRow.addView(
+        val attachButton = TextView(this)
+        attachButton.text = "📎"
+        attachButton.textSize = 24f
+        attachButton.gravity = Gravity.CENTER
+
+        inputBox.addView(
+            attachButton,
+            LinearLayout.LayoutParams(45, 55)
+        )
+
+        val cameraButton = TextView(this)
+        cameraButton.text = "▣"
+        cameraButton.textSize = 24f
+        cameraButton.gravity = Gravity.CENTER
+
+        inputBox.addView(
+            cameraButton,
+            LinearLayout.LayoutParams(45, 55)
+        )
+
+        bottom.addView(
+            inputBox,
+            LinearLayout.LayoutParams(0, 58, 1f)
+        )
+
+        val sendButton = TextView(this)
+        sendButton.text = "➤"
+        sendButton.textSize = 30f
+        sendButton.gravity = Gravity.CENTER
+        sendButton.setTextColor(Color.WHITE)
+
+        val sendBg = GradientDrawable()
+        sendBg.shape = GradientDrawable.OVAL
+        sendBg.setColor(Color.rgb(0, 168, 132))
+        sendButton.background = sendBg
+
+        val sendParams = LinearLayout.LayoutParams(58, 58)
+        sendParams.setMargins(6, 0, 0, 0)
+
+        bottom.addView(
             sendButton,
-            LinearLayout.LayoutParams(105, 60)
+            sendParams
         )
 
-        content.addView(chatRow)
+        root.addView(
+            bottom,
+            LinearLayout.LayoutParams(-1, 70)
+        )
 
-        val callTitle = TextView(this)
-        callTitle.text = "📞  VOICE CALL"
-        callTitle.textSize = 20f
-        callTitle.setTypeface(null, Typeface.BOLD)
-        callTitle.setTextColor(Color.rgb(20, 80, 180))
-        callTitle.setPadding(0, 28, 0, 10)
-
-        content.addView(callTitle)
-
-        callButton = makeButton("📞  CALL")
-        callButton.setTextColor(Color.rgb(0, 120, 50))
-        content.addView(callButton)
-
-        waitButton.setOnClickListener {
-            waitForConnection()
-        }
-
-        acceptButton = makeButton("✅  ACCEPT CALL")
-        acceptButton.visibility = View.GONE
-        content.addView(acceptButton)
-
-        rejectButton = makeButton("❌  REJECT CALL")
-        rejectButton.visibility = View.GONE
-        content.addView(rejectButton)
-
-        endButton = makeButton("🔴  END CALL")
-        endButton.visibility = View.GONE
-        content.addView(endButton)
+        // ================= BUTTON ACTIONS =================
 
         connectButton.setOnClickListener {
             connectToSelectedDevice()
+        }
+
+        waitButton.setOnClickListener {
+            waitForConnection()
         }
 
         sendButton.setOnClickListener {
@@ -214,35 +382,137 @@ class MainActivity : Activity() {
         }
 
         callButton.setOnClickListener {
-            startVoiceCall()
+            Toast.makeText(
+                this,
+                "Voice call feature",
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
-        acceptButton.setOnClickListener {
-            acceptCall()
+        backButton.setOnClickListener {
+            finish()
         }
-
-        rejectButton.setOnClickListener {
-            rejectCall()
-        }
-
-        endButton.setOnClickListener {
-            endCall()
-        }
-
-        scroll.addView(content)
-        root.addView(scroll)
 
         setContentView(root)
+
+        addReceivedMessage(
+            "Bluetooth chat शुरू करें 👋",
+            "09:12"
+        )
     }
 
-    private fun makeButton(text: String): Button {
-        val b = Button(this)
-        b.text = text
-        b.textSize = 15f
-        b.setTypeface(null, Typeface.BOLD)
-        b.setTextColor(Color.rgb(30, 30, 30))
-        return b
+    // ---------------------------------------------------------
+    // MESSAGE BUBBLE
+    // ---------------------------------------------------------
+
+    private fun addSentMessage(message: String) {
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.END
+
+        val bubble = TextView(this)
+
+        bubble.text = "$message    ${getTime()}  ✓✓"
+        bubble.textSize = 16f
+        bubble.setTextColor(Color.rgb(20, 20, 20))
+        bubble.setPadding(15, 10, 10, 8)
+
+        val bg = GradientDrawable()
+        bg.setColor(Color.rgb(220, 248, 198))
+        bg.cornerRadius = 18f
+
+        bubble.background = bg
+
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        params.setMargins(50, 4, 0, 4)
+
+        row.addView(bubble, params)
+
+        chatContainer.addView(row)
+
+        scrollToBottom()
     }
+
+    private fun addReceivedMessage(message: String, time: String = getTime()) {
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.START
+
+        val bubble = TextView(this)
+
+        bubble.text = "$message    $time"
+        bubble.textSize = 16f
+        bubble.setTextColor(Color.rgb(20, 20, 20))
+        bubble.setPadding(15, 10, 10, 8)
+
+        val bg = GradientDrawable()
+        bg.setColor(Color.WHITE)
+        bg.cornerRadius = 18f
+
+        bubble.background = bg
+
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        params.setMargins(0, 4, 50, 4)
+
+        row.addView(bubble, params)
+
+        chatContainer.addView(row)
+
+        scrollToBottom()
+    }
+
+    private fun scrollToBottom() {
+        chatContainer.post {
+            val parent = chatContainer.parent
+            if (parent is ScrollView) {
+                parent.fullScroll(View.FOCUS_DOWN)
+            }
+        }
+    }
+
+    private fun getTime(): String {
+        val calendar = java.util.Calendar.getInstance()
+
+        val hour = calendar.get(
+            java.util.Calendar.HOUR
+        )
+
+        val minute = calendar.get(
+            java.util.Calendar.MINUTE
+        )
+
+        val amPm = if (
+            calendar.get(java.util.Calendar.AM_PM)
+            == java.util.Calendar.AM
+        ) {
+            "AM"
+        } else {
+            "PM"
+        }
+
+        val h = if (hour == 0) 12 else hour
+
+        return String.format(
+            "%02d:%02d %s",
+            h,
+            minute,
+            amPm
+        )
+    }
+
+    // ---------------------------------------------------------
+    // BLUETOOTH DEVICES
+    // ---------------------------------------------------------
 
     private fun loadPairedDevices() {
 
@@ -254,7 +524,7 @@ class MainActivity : Activity() {
             listOf("No paired phone")
         } else {
             devices.map {
-                "${it.name ?: "Unknown"}\n${it.address}"
+                it.name ?: "Unknown device"
             }
         }
 
@@ -267,37 +537,64 @@ class MainActivity : Activity() {
         deviceSpinner.adapter = spinnerAdapter
     }
 
+    // ---------------------------------------------------------
+    // CONNECT
+    // ---------------------------------------------------------
+
     private fun connectToSelectedDevice() {
 
         if (!hasBluetoothPermission()) {
-            statusText.text = "Bluetooth permission required"
+            Toast.makeText(
+                this,
+                "Bluetooth permission required",
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
 
         val devices = adapter.bondedDevices.toList()
 
         if (devices.isEmpty()) {
-            statusText.text = "पहले दोनों phones को Bluetooth से pair करें"
+            Toast.makeText(
+                this,
+                "Pehle dono phones ko Bluetooth se pair karein",
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
 
-        val device = devices[deviceSpinner.selectedItemPosition]
+        val position = deviceSpinner.selectedItemPosition
+
+        if (position < 0 || position >= devices.size) return
+
+        val device = devices[position]
 
         statusText.text = "Connecting..."
 
         thread {
 
             try {
+
                 socket?.close()
 
-                socket = device.createRfcommSocketToServiceRecord(BT_UUID)
+                socket =
+                    device.createRfcommSocketToServiceRecord(BT_UUID)
+
                 socket!!.connect()
 
                 input = socket!!.inputStream
                 output = socket!!.outputStream
 
                 runOnUiThread {
-                    statusText.text = "● Connected: ${device.name}"
+
+                    statusText.text =
+                        "Connected to: ${device.name}"
+
+                    Toast.makeText(
+                        this,
+                        "Bluetooth connected",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
 
                 listenForMessages()
@@ -305,7 +602,9 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
 
                 runOnUiThread {
+
                     statusText.text = "Connection failed"
+
                     Toast.makeText(
                         this,
                         e.message ?: "Connection error",
@@ -316,11 +615,15 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---------------------------------------------------------
+    // WAIT FOR CONNECTION
+    // ---------------------------------------------------------
+
     private fun waitForConnection() {
 
         if (!hasBluetoothPermission()) return
 
-        statusText.text = "Waiting for another phone..."
+        statusText.text = "Waiting for connection..."
 
         thread {
 
@@ -332,14 +635,24 @@ class MainActivity : Activity() {
                         BT_UUID
                     )
 
-                val connected = serverSocket!!.accept()
+                val connected =
+                    serverSocket!!.accept()
 
                 socket = connected
+
                 input = connected.inputStream
                 output = connected.outputStream
 
                 runOnUiThread {
-                    statusText.text = "● Phone Connected"
+
+                    statusText.text =
+                        "Connected to Bluetooth phone"
+
+                    Toast.makeText(
+                        this,
+                        "Phone connected",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
 
                 listenForMessages()
@@ -347,11 +660,16 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
 
                 runOnUiThread {
-                    statusText.text = "Waiting stopped"
+                    statusText.text =
+                        "Waiting stopped"
                 }
             }
         }
     }
+
+    // ---------------------------------------------------------
+    // RECEIVE MESSAGE
+    // ---------------------------------------------------------
 
     private fun listenForMessages() {
 
@@ -359,32 +677,35 @@ class MainActivity : Activity() {
 
             try {
 
-                val buffer = ByteArray(1024)
+                val buffer = ByteArray(4096)
 
                 while (true) {
 
-                    val count = input?.read(buffer) ?: break
+                    val count =
+                        input?.read(buffer) ?: break
 
                     if (count > 0) {
 
                         val message =
-                            String(buffer, 0, count)
+                            String(
+                                buffer,
+                                0,
+                                count
+                            ).trim()
 
-                        runOnUiThread {
+                        if (message.isNotEmpty()) {
 
-                            if (message.trim() == "CALL_REQUEST") {
+                            runOnUiThread {
 
-                                statusText.text =
-                                    "📞 Incoming Voice Call"
+                                if (
+                                    message != "CALL_REQUEST" &&
+                                    message != "CALL_REJECTED"
+                                ) {
 
-                                acceptButton.visibility = View.VISIBLE
-                                rejectButton.visibility = View.VISIBLE
-
-                            } else {
-
-                                chatBox.append(
-                                    "\n👤 Other: $message"
-                                )
+                                    addReceivedMessage(
+                                        message
+                                    )
+                                }
                             }
                         }
                     }
@@ -395,186 +716,34 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---------------------------------------------------------
+    // SEND MESSAGE
+    // ---------------------------------------------------------
+
     private fun sendMessage() {
 
-        val text = messageInput.text.toString().trim()
+        val text =
+            messageInput.text
+                .toString()
+                .trim()
 
         if (text.isEmpty()) return
 
         try {
 
-            output?.write(text.toByteArray())
+            output?.write(
+                text.toByteArray()
+            )
+
             output?.flush()
 
-            chatBox.append("\n🧑 You: $text")
+            addSentMessage(text)
+
             messageInput.text.clear()
 
-        } catch (_: Exception) {
+            val imm =
+                getSystemService(
+                    Context.INPUT_METHOD_SERVICE
+                ) as InputMethodManager
 
-            Toast.makeText(
-                this,
-                "Phone connected नहीं है",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-    private fun startVoiceCall() {
-
-        if (socket == null) {
-            Toast.makeText(
-                this,
-                "पहले phone connect करें",
-                Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-
-        try {
-
-            output?.write("CALL_REQUEST".toByteArray())
-            output?.flush()
-
-            statusText.text = "📞 Calling..."
-
-            callButton.visibility = View.GONE
-            endButton.visibility = View.VISIBLE
-
-            callActive = true
-
-            startAudio()
-
-        } catch (_: Exception) {
-            statusText.text = "Call failed"
-        }
-    }
-
-    private fun acceptCall() {
-
-        acceptButton.visibility = View.GONE
-        rejectButton.visibility = View.GONE
-
-        callButton.visibility = View.GONE
-        endButton.visibility = View.VISIBLE
-
-        statusText.text = "📞 Voice Call Connected"
-
-        callActive = true
-
-        startAudio()
-    }
-
-    private fun rejectCall() {
-
-        try {
-            output?.write("CALL_REJECTED".toByteArray())
-            output?.flush()
-        } catch (_: Exception) {
-        }
-
-        acceptButton.visibility = View.GONE
-        rejectButton.visibility = View.GONE
-
-        statusText.text = "Call rejected"
-    }
-
-    private fun endCall() {
-
-        callActive = false
-
-        try {
-            audioRecord?.stop()
-        } catch (_: Exception) {
-        }
-
-        try {
-            audioTrack?.stop()
-        } catch (_: Exception) {
-        }
-
-        audioRecord?.release()
-        audioTrack?.release()
-
-        audioRecord = null
-        audioTrack = null
-
-        callButton.visibility = View.VISIBLE
-        endButton.visibility = View.GONE
-
-        statusText.text = "● Connected"
-    }
-
-    private fun startAudio() {
-
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                200
-            )
-            return
-        }
-
-        thread {
-
-            try {
-
-                val sampleRate = 16000
-
-                val minBuffer =
-                    AudioRecord.getMinBufferSize(
-                        sampleRate,
-                        AudioFormat.CHANNEL_IN_MONO,
-                        AudioFormat.ENCODING_PCM_16BIT
-                    )
-
-                audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    minBuffer
-                )
-
-                audioRecord!!.startRecording()
-
-                val buffer = ByteArray(minBuffer)
-
-                while (callActive) {
-
-                    val read =
-                        audioRecord!!.read(
-                            buffer,
-                            0,
-                            buffer.size
-                        )
-
-                    if (read > 0) {
-                        output?.write(buffer, 0, read)
-                        output?.flush()
-                    }
-                }
-
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    override fun onDestroy() {
-
-        callActive = false
-
-        try {
-            audioRecord?.release()
-            audioTrack?.release()
-            input?.close()
-            output?.close()
-            socket?.close()
-            serverSocket?.close()
-        } catch (_: Exception) {
-        }
-
-        super.onDestroy()
-    }
-}
+            imm.hideSof
