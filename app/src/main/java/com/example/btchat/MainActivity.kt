@@ -78,22 +78,27 @@ class MainActivity : Activity() {
         val root = LinearLayout(this)
 root.orientation = LinearLayout.VERTICAL
 
-root.setPadding(0, 28, 0, 20)
+window.statusBarColor = Color.rgb(0, 105, 92)
+window.navigationBarColor = Color.WHITE
+
+window.decorView.systemUiVisibility =
+    android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
 
 root.setOnApplyWindowInsetsListener { view, insets ->
-    val top = insets.getInsets(
+
+    val statusBar = insets.getInsets(
         android.view.WindowInsets.Type.statusBars()
     ).top
 
-    val bottom = insets.getInsets(
+    val navigationBar = insets.getInsets(
         android.view.WindowInsets.Type.navigationBars()
     ).bottom
 
     view.setPadding(
-        0,
-        top,
-        0,
-        bottom + 12
+        view.paddingLeft,
+        statusBar,
+        view.paddingRight,
+        navigationBar + 8
     )
 
     insets
